@@ -336,11 +336,9 @@
             }
         }
 
-        // 接線の表示切り替え処理
         function toggleGuideLines() {
             showGuideLines = document.getElementById('showGuideCheck').checked;
             if(charts.xt && charts.xt.data.datasets.length > 1) {
-                // 1番目以降のデータセット（すべての独立した接線）の色を切り替える
                 for(let i = 1; i < charts.xt.data.datasets.length; i++) {
                     charts.xt.data.datasets[i].borderColor = showGuideLines ? '#ffc107' : 'transparent';
                 }
@@ -539,33 +537,27 @@
                 regions.push(currentRegion);
             }
 
-            // ★改良部分：各区間ごとの「独立した接線データセット」を作成する★
+            // ★変更点：実際の開始時間から終了時間までのみ接線を引く★
             let guideDatasets = [];
             regions.forEach(region => {
                 let s = region.startIndex;
+                let e = region.endIndex;
                 let t_s = parseFloat(timeData[s]);
                 let x_s = xData[s];
                 let v_s = parseFloat(vData[s]); // 区間突入時の初速度
-                let e = region.endIndex;
 
                 let guideData = new Array(timeData.length).fill(null);
-                
-                // その区間の「目標距離」を設定（前方に進むなら+10m、後退なら-10m）
-                let target_x = x_s + (v_s > 0 ? 10 : (v_s < 0 ? -10 : 0));
 
-                for (let i = s; i < timeData.length; i++) {
-                    let t_i = parseFloat(timeData[i]);
-                    // 突入時の速度のまま、等速直線運動をした場合の位置（接線）
-                    let x_g = x_s + v_s * (t_i - t_s);
-                    guideData[i] = x_g;
-
-                    // 接線が目標の距離（10m先）に到達したら、描画をストップする
-                    if (v_s > 0 && x_g >= target_x) break;
-                    if (v_s < 0 && x_g <= target_x) break;
-                    if (v_s === 0 && i >= e) break; // 速度0の場合は区間終了まで
+                // 各区間の定義域内でのみ等速直線運動の接線を計算
+                if (e > s) {
+                    for (let i = s; i <= e; i++) {
+                        let t_i = parseFloat(timeData[i]);
+                        guideData[i] = x_s + v_s * (t_i - t_s);
+                    }
+                } else {
+                    guideData[s] = x_s;
                 }
 
-                // 計算した1本分の接線をデータセットに追加
                 guideDatasets.push({
                     data: guideData,
                     borderColor: showGuideLines ? '#ffc107' : 'transparent',
@@ -598,7 +590,6 @@
                 }
             };
 
-            // 実データのグラフと、すべての接線のグラフを結合
             let xtDatasets = [
                 { 
                     data: xData, 
