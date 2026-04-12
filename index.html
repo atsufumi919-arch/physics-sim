@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
+
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="robots" content="noindex, nofollow">
@@ -94,6 +95,7 @@
             border: 1px solid #bee5eb;
             color: #0c5460;
         }
+        /* 新機能：ガイドライン用のボタンスタイル */
         .mode-toggle.guide-mode {
             background-color: #e2e3e5;
             border: 1px solid #d6d8db;
@@ -247,7 +249,7 @@
     <script>
         let hideCourseNames = false; 
         let hideGraphLines = false; 
-        let showGuideLines = false; 
+        let showGuideLines = false; // 補助線のフラグ
 
         const segmentOverlayPlugin = {
             id: 'segmentOverlay',
@@ -303,6 +305,7 @@
         };
         Chart.register(segmentOverlayPlugin);
 
+        // バランスの取れた黄金パラメータ
         const V0 = 5.0;              
         const SEGMENT_LENGTH = 10.0; 
         const ACCEL_A = 1.5;         
@@ -336,9 +339,11 @@
             }
         }
 
+        // 新機能：直線ガイドの切り替え
         function toggleGuideLines() {
             showGuideLines = document.getElementById('showGuideCheck').checked;
             if(charts.xt && charts.xt.data.datasets.length > 1) {
+                // ガイドライン（データセット2番目）の色を切り替え
                 charts.xt.data.datasets[1].borderColor = showGuideLines ? '#ffc107' : 'transparent';
                 charts.xt.update();
             }
@@ -350,3 +355,279 @@
             document.getElementById(tabId).classList.add('active');
             
             if(tabId === 'at') {
+                document.getElementById('atTabBtn').classList.add('active');
+            } else if (tabId === 'vt') {
+                document.querySelectorAll('.tab-btn')[1].classList.add('active');
+            } else {
+                document.querySelectorAll('.tab-btn')[0].classList.add('active');
+            }
+        }
+
+        function unlockAT() {
+            if(!atUnlocked) {
+                const confirmMsg = "A-Tグラフを表示します。\nペアとの予想・話し合いは終わりましたか？";
+                if(confirm(confirmMsg)) {
+                    atUnlocked = true;
+                    const btn = document.getElementById('atTabBtn');
+                    btn.innerText = "A-T グラフ (加速度) 🔓";
+                    btn.classList.remove('hidden-tab');
+                    switchTab('at');
+                }
+            } else {
+                switchTab('at');
+            }
+        }
+
+        function getSelectedSegments() {
+            let segments = [];
+            for (let i = 0; i < 5; i++) {
+                let val = document.getElementById(`seg${i}`).value;
+                if (val === 'none') break;
+                segments.push(val);
+            }
+            if(segments.length === 0) segments.push('B');
+            return segments;
+        }
+
+        function drawCourse(segments) {
+            const canvas = document.getElementById('courseCanvas');
+            const ctx = canvas.getContext('2d');
+            canvas.width = canvas.parentElement.clientWidth;
+            canvas.height = canvas.parentElement.clientHeight;
+            
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            const startX = 50;
+            const endX = canvas.width - 50;
+            const stepX = (endX - startX) / 5; 
+            
+            let currentRelHeight = 0;
+            let relHeights = [0];
+            segments.forEach(seg => {
+                if(seg === 'A') currentRelHeight += 1.5; 
+                else if(seg === 'C') currentRelHeight -= 1.0; 
+                relHeights.push(currentRelHeight);
+            });
+            let maxRel = Math.max(...relHeights);
+            let minRel = Math.min(...relHeights);
+            
+            let totalH = (maxRel - minRel) + 3.0; 
+            let scale = canvas.height / Math.max(totalH, 1);
+            
+            let startY = (0 - minRel + 1.5) * scale;
+
+            ctx.beginPath();
+            ctx.setLineDash([5, 5]); 
+            ctx.moveTo(startX - 20, startY);
+            ctx.lineTo(startX + stepX * 5 + 20, startY);
+            ctx.strokeStyle = '#adb5bd';
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+            ctx.setLineDash([]); 
+
+            ctx.beginPath();
+            ctx.moveTo(startX, startY);
+            ctx.lineWidth = 5;
+            ctx.strokeStyle = '#343a40'; 
+            ctx.lineJoin = 'round'; 
+            
+            let currentX = startX;
+            let currentY = startY;
+            
+            segments.forEach((seg, index) => {
+                let nextX = currentX + stepX;
+                let nextY = currentY;
+                if (seg === 'A') nextY += 1.5 * scale;
+                else if (seg === 'C') nextY -= 1.0 * scale;
+                
+                ctx.lineTo(nextX, nextY);
+                
+                ctx.font = "bold 14px sans-serif";
+                ctx.fillStyle = "#0056b3";
+                
+                let labelText = hideCourseNames ? `区間${index+1}` : `区間${index+1} (${seg})`;
+                let textY = Math.min(currentY, nextY) - 15;
+                ctx.fillText(labelText, currentX + stepX/2 - 30, textY);
+                
+                currentX = nextX;
+                currentY = nextY;
+            });
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.arc(startX, startY - 10, 8, 0, Math.PI*2);
+            ctx.fillStyle = '#dc3545';
+            ctx.fill();
+        }
+
+        function generateSimulation() {
+            const segments = getSelectedSegments();
+            drawCourse(segments);
+
+            let t = 0;
+            let x = 0;
+            let v = V0;
+            const dt = 0.05; 
+            const maxT = 60.0; 
+
+            let timeData = [];
+            let xData = [];
+            let vData = [];
+            let aData = [];
+            
+            let regions = [];
+            let currentRegion = null;
+
+            const getA = (seg) => {
+                if(seg === 'A') return ACCEL_A;
+                if(seg === 'B') return ACCEL_B;
+                if(seg === 'C') return ACCEL_C;
+                return 0;
+            };
+
+            while (t <= maxT) {
+                let currentStepIndex = timeData.length;
+                
+                timeData.push(t.toFixed(2));
+                xData.push(x);
+                vData.push(v);
+
+                let segIndex = Math.floor(x / SEGMENT_LENGTH);
+                let currentA = 0;
+
+                let checkSegIndex = segIndex;
+                if (x < 0) checkSegIndex = -1;
+                if (segIndex >= segments.length) checkSegIndex = segments.length;
+
+                if (!currentRegion || currentRegion.segIndex !== checkSegIndex) {
+                    if (currentRegion) {
+                        currentRegion.endIndex = currentStepIndex - 1;
+                        regions.push(currentRegion);
+                    }
+                    currentRegion = {
+                        segIndex: checkSegIndex,
+                        name: checkSegIndex >= 0 && checkSegIndex < segments.length ? segments[checkSegIndex] : '',
+                        startIndex: currentStepIndex,
+                        endIndex: currentStepIndex
+                    };
+                }
+
+                if (x < 0) {
+                    currentA = getA(segments[0]); 
+                    aData.push(currentA);
+                    break;
+                }
+                
+                if (segIndex >= segments.length) {
+                    currentA = 0;
+                    aData.push(currentA);
+                    break; 
+                }
+
+                currentA = getA(segments[segIndex]);
+                aData.push(currentA);
+
+                x = x + v * dt + 0.5 * currentA * dt * dt;
+                v = v + currentA * dt;
+                t += dt;
+            }
+            
+            if (currentRegion) {
+                currentRegion.endIndex = timeData.length - 1;
+                regions.push(currentRegion);
+            }
+
+            // --- 直線ガイドライン（等速直線運動の仮定）のデータ生成 ---
+            let guideData = new Array(timeData.length).fill(null);
+            regions.forEach(region => {
+                let s = region.startIndex;
+                let e = region.endIndex;
+                let t_s = parseFloat(timeData[s]);
+                let x_s = xData[s];
+                let t_e = parseFloat(timeData[e]);
+                let x_e = xData[e];
+
+                if (t_e > t_s) {
+                    for(let i = s; i <= e; i++) {
+                        let t_i = parseFloat(timeData[i]);
+                        // 始点と終点を結ぶ一次関数（直線）を計算
+                        guideData[i] = x_s + (x_e - x_s) * (t_i - t_s) / (t_e - t_s);
+                    }
+                } else {
+                    guideData[s] = x_s;
+                }
+            });
+
+            renderCharts(timeData, xData, vData, aData, guideData, regions, segments.length);
+        }
+
+        function renderCharts(labels, xData, vData, aData, guideData, regions, maxSegments) {
+            const commonOptions = {
+                responsive: true,
+                maintainAspectRatio: false,
+                layout: { padding: { top: 40 } },
+                elements: { point: { radius: 0 } },
+                animation: { duration: 0 },
+                plugins: {
+                    legend: { display: false },
+                    segmentOverlay: { regions: regions, maxSegments: maxSegments }
+                },
+                scales: {
+                    x: {
+                        title: { display: true, text: '時間 t [s]' },
+                        ticks: { maxTicksLimit: 10 }
+                    }
+                }
+            };
+
+            if(charts.xt) charts.xt.destroy();
+            charts.xt = new Chart(document.getElementById('xtChart'), {
+                type: 'line',
+                data: { 
+                    labels: labels, 
+                    datasets: [
+                        { // 実際の曲線（物理演算）
+                            data: xData, 
+                            borderColor: hideGraphLines ? 'transparent' : '#007bff', 
+                            borderWidth: 3 
+                        },
+                        { // 追加：直線ガイド（等速直線運動の仮想線）
+                            data: guideData,
+                            borderColor: showGuideLines ? '#ffc107' : 'transparent', // 黄色い点線
+                            borderWidth: 2,
+                            borderDash: [5, 5]
+                        }
+                    ] 
+                },
+                options: { ...commonOptions, scales: { ...commonOptions.scales, y: { title: { display: true, text: '位置 x [m]' } } } }
+            });
+
+            if(charts.vt) charts.vt.destroy();
+            charts.vt = new Chart(document.getElementById('vtChart'), {
+                type: 'line',
+                data: { labels: labels, datasets: [{ data: vData, borderColor: hideGraphLines ? 'transparent' : '#28a745', borderWidth: 3 }] },
+                options: { ...commonOptions, scales: { ...commonOptions.scales, y: { title: { display: true, text: '速度 v [m/s]' } } } }
+            });
+
+            if(charts.at) charts.at.destroy();
+            charts.at = new Chart(document.getElementById('atChart'), {
+                type: 'line',
+                data: { labels: labels, datasets: [{ data: aData, borderColor: hideGraphLines ? 'transparent' : '#dc3545', borderWidth: 3, stepped: true }] },
+                options: { ...commonOptions, scales: { ...commonOptions.scales, y: { 
+                    title: { display: true, text: '加速度 a [m/s²]' },
+                    suggestedMin: -3, suggestedMax: 3 
+                } } }
+            });
+        }
+
+        window.onload = () => {
+            document.querySelectorAll('.segment-select').forEach(select => {
+                select.addEventListener('change', () => {
+                    drawCourse(getSelectedSegments());
+                });
+            });
+            generateSimulation();
+        };
+    </script>
+</body>
+</html>
