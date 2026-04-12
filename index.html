@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex, nofollow">
+    <title>運動のグラフシミュレーター</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --primary: #0056b3;
+            --bg: #f8f9fa;
+            --text: #333;
+            --border: #ccc;
+            --danger: #dc3545;
+        }
+        body {
+            font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', Meiryo, sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        h1 {
+            font-size: 1.5rem;
+            color: var(--primary);
+            margin-bottom: 20px;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            width: 100%;
+            max-width: 800px;
+        }
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 15px;
+            align-items: center;
+        }
+        select {
+            padding: 8px;
+            font-size: 1rem;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+        }
+        button.primary-btn {
+            padding: 10px 20px;
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 1rem;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background 0.3s;
+        }
+        button.primary-btn:hover {
+            background-color: #004494;
+        }
+        .toggle-group {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-bottom: 20px;
+            width: 100%;
+        }
+        .mode-toggle {
+            padding: 10px 15px;
+            border-radius: 4px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+        }
+        .mode-toggle input[type="checkbox"] {
+            transform: scale(1.2);
+            cursor: pointer;
+        }
+        .mode-toggle.problem-mode {
+            background-color: #fff3cd;
+            border: 1px solid #ffeeba;
+            color: #856404;
+        }
+        .mode-toggle.prediction-mode {
+            background-color: #d1ecf1;
+            border: 1px solid #bee5eb;
+            color: #0c5460;
+        }
+        .mode-toggle.guide-mode {
+            background-color: #e2e3e5;
+            border: 1px solid #d6d8db;
+            color: #383d41;
+        }
+        .course-preview {
+            width: 100%;
+            height: 180px; 
+            background-color: #e9ecef;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            position: relative;
+        }
+        canvas#courseCanvas {
+            width: 100%;
+            height: 100%;
+        }
+        .tabs {
+            display: flex;
+            gap: 5px;
+            margin-bottom: 15px;
+        }
+        .tab-btn {
+            padding: 10px 15px;
+            background-color: #e9ecef;
+            color: var(--text);
+            border: 1px solid var(--border);
+            border-bottom: none;
+            border-radius: 8px 8px 0 0;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        .tab-btn.active {
+            background-color: white;
+            border-top: 3px solid var(--primary);
+        }
+        .tab-btn.hidden-tab {
+            background-color: #ffdddd;
+            color: var(--danger);
+            border-color: #dca7a7;
+        }
+        .graph-container {
+            display: none;
+            background: white;
+            border: 1px solid var(--border);
+            padding: 15px;
+            border-radius: 0 8px 8px 8px;
+            margin-top: -16px; 
+        }
+        .graph-container.active {
+            display: block;
+        }
+        .canvas-wrapper {
+            position: relative;
+            height: 400px;
+            width: 100%;
+        }
+        .info-text {
+            font-size: 0.9rem;
+            color: #666;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>運動のグラフシミュレーター</h1>
+
+    <div class="container">
+        <div class="controls">
+            <span>コース作成:</span>
+            <select id="seg0" class="segment-select">
+                <option value="A">A: 下り坂</option>
+                <option value="B" selected>B: 水平</option>
+                <option value="C">C: 上り坂</option>
+            </select>
+            <select id="seg1" class="segment-select">
+                <option value="none">-- 終了 --</option>
+                <option value="A">A: 下り坂</option>
+                <option value="B">B: 水平</option>
+                <option value="C">C: 上り坂</option>
+            </select>
+            <select id="seg2" class="segment-select">
+                <option value="none" selected>-- 終了 --</option>
+                <option value="A">A: 下り坂</option>
+                <option value="B">B: 水平</option>
+                <option value="C">C: 上り坂</option>
+            </select>
+            <select id="seg3" class="segment-select">
+                <option value="none" selected>-- 終了 --</option>
+                <option value="A">A: 下り坂</option>
+                <option value="B">B: 水平</option>
+                <option value="C">C: 上り坂</option>
+            </select>
+            <select id="seg4" class="segment-select">
+                <option value="none" selected>-- 終了 --</option>
+                <option value="A">A: 下り坂</option>
+                <option value="B">B: 水平</option>
+                <option value="C">C: 上り坂</option>
+            </select>
+            <button class="primary-btn" onclick="generateSimulation()">グラフを作成</button>
+        </div>
+
+        <div class="toggle-group">
+            <label class="mode-toggle problem-mode">
+                <input type="checkbox" id="hideAnswerCheck" onchange="toggleAnswerMode()">
+                【問題モード】図とグラフからコース名(A,B,C)を隠す
+            </label>
+            <label class="mode-toggle prediction-mode">
+                <input type="checkbox" id="hideLinesCheck" onchange="toggleGraphLines()">
+                【予想用シート作成】グラフの線を隠す（枠組みだけ残す）
+            </label>
+            <label class="mode-toggle guide-mode">
+                <input type="checkbox" id="showGuideCheck" onchange="toggleGuideLines()">
+                【補助線】X-Tグラフに「直線（等速直線運動）」の補助線を引く
+            </label>
+        </div>
+
+        <div class="course-preview">
+            <canvas id="courseCanvas"></canvas>
+        </div>
+
+        <div class="tabs">
+            <button class="tab-btn active" onclick="switchTab('xt')">X-T グラフ (位置)</button>
+            <button class="tab-btn" onclick="switchTab('vt')">V-T グラフ (速度)</button>
+            <button class="tab-btn hidden-tab" id="atTabBtn" onclick="unlockAT()">A-T グラフを開く 🔒</button>
+        </div>
+
+        <div id="xt" class="graph-container active">
+            <div class="canvas-wrapper">
+                <canvas id="xtChart"></canvas>
+            </div>
+            <p class="info-text">縦軸：位置 x [m] / 横軸：時間 t [s]</p>
+        </div>
+
+        <div id="vt" class="graph-container">
+            <div class="canvas-wrapper">
+                <canvas id="vtChart"></canvas>
+            </div>
+            <p class="info-text">縦軸：速度 v [m/s] / 横軸：時間 t [s]</p>
+        </div>
+
+        <div id="at" class="graph-container">
+            <div class="canvas-wrapper">
+                <canvas id="atChart"></canvas>
+            </div>
+            <p class="info-text">縦軸：加速度 a [m/s²] / 横軸：時間 t [s]</p>
+        </div>
+    </div>
+
+    <script>
+        let hideCourseNames = false; 
+        let hideGraphLines = false; 
+        let showGuideLines = false; 
+
+        const segmentOverlayPlugin = {
+            id: 'segmentOverlay',
+            afterDraw: (chart, args, options) => {
+                const { ctx, chartArea: { top, bottom } } = chart;
+                const regions = options.regions || [];
+                if(regions.length === 0) return;
+
+                const meta = chart.getDatasetMeta(0);
+                if(!meta || !meta.data || meta.data.length === 0) return;
+
+                ctx.save();
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'bottom';
+                ctx.font = 'bold 12px sans-serif';
+                ctx.fillStyle = '#495057'; 
+                ctx.strokeStyle = 'rgba(0, 0, 0, 0.3)'; 
+                ctx.lineWidth = 1.5;
+                ctx.setLineDash([4, 4]);
+
+                regions.forEach((region, index) => {
+                    if (region.startIndex >= meta.data.length || region.endIndex >= meta.data.length) return;
+                    
+                    const startPx = meta.data[region.startIndex].x;
+                    const endPx = meta.data[region.endIndex].x;
+                    
+                    if (region.startIndex > 0) {
+                        ctx.beginPath();
+                        ctx.moveTo(startPx, top);
+                        ctx.lineTo(startPx, bottom);
+                        ctx.stroke();
+                    }
+
+                    const midPx = startPx + (endPx - startPx) / 2;
+                    let labelText = "";
+                    if (region.segIndex === -1) {
+                        labelText = "逆走";
+                    } else if (region.segIndex >= options.maxSegments) {
+                        labelText = "完走";
+                    } else {
+                        if (hideCourseNames) {
+                            labelText = `区間${region.segIndex + 1}`;
+                        } else {
+                            labelText = `区間${region.segIndex + 1} (${region.name})`;
+                        }
+                    }
+
+                    const yOffset = top - 4 - (index % 2) * 18; 
+                    ctx.fillText(labelText, midPx, yOffset);
+                });
+                ctx.restore();
+            }
+        };
+        Chart.register(segmentOverlayPlugin);
+
+        const V0 = 5.0;              
+        const SEGMENT_LENGTH = 10.0; 
+        const ACCEL_A = 1.5;         
+        const ACCEL_B = 0;           
+        const ACCEL_C = -1.0;        
+
+        let charts = { xt: null, vt: null, at: null };
+        let atUnlocked = false;
+
+        function toggleAnswerMode() {
+            hideCourseNames = document.getElementById('hideAnswerCheck').checked;
+            drawCourse(getSelectedSegments()); 
+            if(charts.xt) charts.xt.update();
+            if(charts.vt) charts.vt.update();
+            if(charts.at) charts.at.update();
+        }
+
+        function toggleGraphLines() {
+            hideGraphLines = document.getElementById('hideLinesCheck').checked;
+            if(charts.xt) {
+                charts.xt.data.datasets[0].borderColor = hideGraphLines ? 'transparent' : '#007bff';
+                charts.xt.update();
+            }
+            if(charts.vt) {
+                charts.vt.data.datasets[0].borderColor = hideGraphLines ? 'transparent' : '#28a745';
+                charts.vt.update();
+            }
+            if(charts.at) {
+                charts.at.data.datasets[0].borderColor = hideGraphLines ? 'transparent' : '#dc3545';
+                charts.at.update();
+            }
+        }
+
+        function toggleGuideLines() {
+            showGuideLines = document.getElementById('showGuideCheck').checked;
+            if(charts.xt && charts.xt.data.datasets.length > 1) {
+                charts.xt.data.datasets[1].borderColor = showGuideLines ? '#ffc107' : 'transparent';
+                charts.xt.update();
+            }
+        }
+
+        function switchTab(tabId) {
+            document.querySelectorAll('.graph-container').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+            document.getElementById(tabId).classList.add('active');
+            
+            if(tabId === 'at') {
