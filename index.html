@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="robots" content="noindex, nofollow">
     <title>運動のグラフシミュレーター</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         :root {
@@ -13,6 +14,8 @@
             --text: #333;
             --border: #ccc;
             --danger: #dc3545;
+            --play: #28a745;
+            --share: #6f42c1;
         }
         body {
             font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', Meiryo, sans-serif;
@@ -61,15 +64,24 @@
             font-weight: bold;
             transition: background 0.3s;
         }
-        button.primary-btn:hover {
-            background-color: #004494;
+        button.primary-btn:hover { background-color: #004494; }
+        
+        /* スイッチ類と共有ボタンの横並びレイアウト */
+        .middle-section {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            flex-wrap: wrap;
+            gap: 20px;
+            margin-bottom: 20px;
+            width: 100%;
         }
         .toggle-group {
             display: flex;
             flex-direction: column;
             gap: 10px;
-            margin-bottom: 20px;
-            width: 100%;
+            flex: 1;
+            min-width: 320px;
         }
         .mode-toggle {
             padding: 10px 15px;
@@ -99,22 +111,76 @@
             border: 1px solid #d6d8db;
             color: #383d41;
         }
+
+        /* 共有（QR）セクション */
+        .share-group {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+        }
+        button.share-btn {
+            padding: 10px 20px;
+            background-color: var(--share);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 1rem;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background 0.3s;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.15);
+        }
+        button.share-btn:hover { background-color: #5a32a3; }
+        .qr-result-box {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+            background: #f8f9fa;
+            padding: 10px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+        }
+        #qrcode img {
+            border: 5px solid white;
+            border-radius: 4px;
+        }
+        #share-url {
+            width: 140px;
+            font-size: 0.8rem;
+            padding: 4px;
+            text-align: center;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
         .course-preview {
             width: 100%;
             height: 180px; 
             background-color: #e9ecef;
             border-radius: 4px;
-            margin-bottom: 20px;
+            margin-bottom: 15px;
             position: relative;
         }
         canvas#courseCanvas {
             width: 100%;
             height: 100%;
         }
+        
+        .tab-and-play-wrapper {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            width: 100%;
+            margin-bottom: 15px;
+            position: relative;
+            z-index: 2;
+        }
         .tabs {
             display: flex;
             gap: 5px;
-            margin-bottom: 15px;
         }
         .tab-btn {
             padding: 10px 15px;
@@ -135,6 +201,25 @@
             color: var(--danger);
             border-color: #dca7a7;
         }
+        
+        button.play-btn {
+            padding: 8px 20px;
+            background-color: var(--play);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 1rem;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background 0.3s;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.15); 
+            margin-bottom: 2px;
+        }
+        button.play-btn:hover { background-color: #218838; }
+
         .graph-container {
             display: none;
             background: white;
@@ -194,32 +279,45 @@
                 <option value="B">B: 水平</option>
                 <option value="C">C: 上り坂</option>
             </select>
-            <button class="primary-btn" onclick="generateSimulation()">グラフを作成</button>
+            <button class="primary-btn" onclick="showGraph()">グラフを作成</button>
         </div>
 
-        <div class="toggle-group">
-            <label class="mode-toggle problem-mode">
-                <input type="checkbox" id="hideAnswerCheck" onchange="toggleAnswerMode()">
-                【問題モード】図とグラフからコース名(A,B,C)を隠す
-            </label>
-            <label class="mode-toggle prediction-mode">
-                <input type="checkbox" id="hideLinesCheck" onchange="toggleGraphLines()">
-                【予想用シート作成】グラフの線を隠す（枠組みだけ残す）
-            </label>
-            <label class="mode-toggle guide-mode">
-                <input type="checkbox" id="showGuideCheck" onchange="toggleGuideLines()">
-                【補助線】X-Tグラフに「等速直線運動（接線）」の補助線を引く
-            </label>
+        <div class="middle-section">
+            <div class="toggle-group">
+                <label class="mode-toggle problem-mode">
+                    <input type="checkbox" id="hideAnswerCheck" onchange="toggleAnswerMode()">
+                    【問題モード】図とグラフからコース名(A,B,C)を隠す
+                </label>
+                <label class="mode-toggle prediction-mode">
+                    <input type="checkbox" id="hideLinesCheck" onchange="toggleGraphLines()">
+                    【予想用シート作成】グラフの線を隠す（枠組みだけ残す）
+                </label>
+                <label class="mode-toggle guide-mode">
+                    <input type="checkbox" id="showGuideCheck" onchange="toggleGuideLines()">
+                    【補助線】X-Tグラフに「等速直線運動（接線）」の補助線を引く
+                </label>
+            </div>
+            
+            <div class="share-group">
+                <button class="share-btn" onclick="generateShareQR()">📱 生徒に共有 (QR)</button>
+                <div id="qr-result" class="qr-result-box" style="display: none;">
+                    <div id="qrcode"></div>
+                    <input type="text" id="share-url" readonly onclick="this.select()" title="クリックしてURLをコピー">
+                </div>
+            </div>
         </div>
 
         <div class="course-preview">
             <canvas id="courseCanvas"></canvas>
         </div>
 
-        <div class="tabs">
-            <button class="tab-btn active" onclick="switchTab('xt')">X-T グラフ (位置)</button>
-            <button class="tab-btn" onclick="switchTab('vt')">V-T グラフ (速度)</button>
-            <button class="tab-btn hidden-tab" id="atTabBtn" onclick="unlockAT()">A-T グラフを開く 🔒</button>
+        <div class="tab-and-play-wrapper">
+            <div class="tabs">
+                <button class="tab-btn active" onclick="switchTab('xt')">X-T グラフ (位置)</button>
+                <button class="tab-btn" onclick="switchTab('vt')">V-T グラフ (速度)</button>
+                <button class="tab-btn hidden-tab" id="atTabBtn" onclick="unlockAT()">A-T グラフを開く 🔒</button>
+            </div>
+            <button class="play-btn" id="playBtn" onclick="togglePlay()">▶ アニメーション再生</button>
         </div>
 
         <div id="xt" class="graph-container active">
@@ -249,10 +347,15 @@
         let hideGraphLines = false; 
         let showGuideLines = false; 
 
+        let isPlaying = false;
+        let currentFrameIndex = -1;
+        let animationFrameId = null;
+        let simulationData = { x: [], t: [] };
+
         const segmentOverlayPlugin = {
             id: 'segmentOverlay',
             afterDraw: (chart, args, options) => {
-                const { ctx, chartArea: { top, bottom } } = chart;
+                const { ctx, chartArea: { top, bottom, left, right } } = chart;
                 const regions = options.regions || [];
                 if(regions.length === 0) return;
 
@@ -283,21 +386,36 @@
 
                     const midPx = startPx + (endPx - startPx) / 2;
                     let labelText = "";
-                    if (region.segIndex === -1) {
-                        labelText = "逆走";
-                    } else if (region.segIndex >= options.maxSegments) {
-                        labelText = "完走";
-                    } else {
-                        if (hideCourseNames) {
-                            labelText = `区間${region.segIndex + 1}`;
-                        } else {
-                            labelText = `区間${region.segIndex + 1} (${region.name})`;
-                        }
-                    }
+                    if (region.segIndex === -1) labelText = "逆走";
+                    else if (region.segIndex >= options.maxSegments) labelText = "完走";
+                    else labelText = hideCourseNames ? `区間${region.segIndex + 1}` : `区間${region.segIndex + 1} (${region.name})`;
 
                     const yOffset = top - 4 - (index % 2) * 18; 
                     ctx.fillText(labelText, midPx, yOffset);
                 });
+
+                if (currentFrameIndex >= 0 && currentFrameIndex < meta.data.length) {
+                    const currentX = meta.data[currentFrameIndex].x;
+                    const currentY = meta.data[currentFrameIndex].y;
+                    
+                    ctx.setLineDash([]);
+                    ctx.strokeStyle = 'rgba(220, 53, 69, 0.8)';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.moveTo(currentX, top);
+                    ctx.lineTo(currentX, bottom);
+                    ctx.stroke();
+
+                    if (!hideGraphLines) {
+                        ctx.beginPath();
+                        ctx.arc(currentX, currentY, 6, 0, 2 * Math.PI);
+                        ctx.fillStyle = '#dc3545';
+                        ctx.fill();
+                        ctx.strokeStyle = 'white';
+                        ctx.lineWidth = 2;
+                        ctx.stroke();
+                    }
+                }
                 ctx.restore();
             }
         };
@@ -312,6 +430,12 @@
         let charts = { xt: null, vt: null, at: null };
         let atUnlocked = false;
 
+        function showGraph() {
+            document.getElementById('hideLinesCheck').checked = false;
+            hideGraphLines = false;
+            generateSimulation();
+        }
+
         function toggleAnswerMode() {
             hideCourseNames = document.getElementById('hideAnswerCheck').checked;
             drawCourse(getSelectedSegments()); 
@@ -324,6 +448,11 @@
             hideGraphLines = document.getElementById('hideLinesCheck').checked;
             if(charts.xt) {
                 charts.xt.data.datasets[0].borderColor = hideGraphLines ? 'transparent' : '#007bff';
+                if(charts.xt.data.datasets.length > 1) {
+                    for(let i = 1; i < charts.xt.data.datasets.length; i++) {
+                        charts.xt.data.datasets[i].borderColor = (showGuideLines && !hideGraphLines) ? '#ffc107' : 'transparent';
+                    }
+                }
                 charts.xt.update();
             }
             if(charts.vt) {
@@ -340,7 +469,7 @@
             showGuideLines = document.getElementById('showGuideCheck').checked;
             if(charts.xt && charts.xt.data.datasets.length > 1) {
                 for(let i = 1; i < charts.xt.data.datasets.length; i++) {
-                    charts.xt.data.datasets[i].borderColor = showGuideLines ? '#ffc107' : 'transparent';
+                    charts.xt.data.datasets[i].borderColor = (showGuideLines && !hideGraphLines) ? '#ffc107' : 'transparent';
                 }
                 charts.xt.update();
             }
@@ -350,7 +479,6 @@
             document.querySelectorAll('.graph-container').forEach(el => el.classList.remove('active'));
             document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
             document.getElementById(tabId).classList.add('active');
-            
             if(tabId === 'at') {
                 document.getElementById('atTabBtn').classList.add('active');
             } else if (tabId === 'vt') {
@@ -375,6 +503,32 @@
             }
         }
 
+        // ★新機能：QRコードによる共有機能★
+        function generateShareQR() {
+            let segs = [];
+            for (let i = 0; i < 5; i++) {
+                segs.push(document.getElementById(`seg${i}`).value);
+            }
+            
+            // 現在のURLにコース情報(?s=A,B...)を付与
+            const shareUrl = window.location.origin + window.location.pathname + '?s=' + segs.join(',');
+            
+            const qrContainer = document.getElementById('qrcode');
+            qrContainer.innerHTML = ''; // 以前のQRをクリア
+            
+            new QRCode(qrContainer, {
+                text: shareUrl,
+                width: 140,
+                height: 140,
+                colorDark : "#000000",
+                colorLight : "#ffffff",
+                correctLevel : QRCode.CorrectLevel.L
+            });
+            
+            document.getElementById('share-url').value = shareUrl;
+            document.getElementById('qr-result').style.display = 'flex';
+        }
+
         function getSelectedSegments() {
             let segments = [];
             for (let i = 0; i < 5; i++) {
@@ -386,7 +540,46 @@
             return segments;
         }
 
-        function drawCourse(segments) {
+        function togglePlay() {
+            const btn = document.getElementById('playBtn');
+            if (isPlaying) {
+                isPlaying = false;
+                btn.innerHTML = "▶ アニメーション再生";
+                cancelAnimationFrame(animationFrameId);
+            } else {
+                if (currentFrameIndex >= simulationData.x.length - 1) {
+                    currentFrameIndex = 0; 
+                } else if (currentFrameIndex === -1) {
+                    currentFrameIndex = 0;
+                }
+                isPlaying = true;
+                btn.innerHTML = "⏸ 一時停止";
+                animateLoop();
+            }
+        }
+
+        function animateLoop() {
+            if (!isPlaying) return;
+            
+            currentFrameIndex += 1; 
+
+            if (currentFrameIndex >= simulationData.x.length) {
+                currentFrameIndex = simulationData.x.length - 1;
+                isPlaying = false;
+                document.getElementById('playBtn').innerHTML = "▶ アニメーション再生";
+            }
+
+            drawCourse(getSelectedSegments(), simulationData.x[currentFrameIndex]);
+            if(charts.xt) charts.xt.update('none'); 
+            if(charts.vt) charts.vt.update('none');
+            if(charts.at) charts.at.update('none');
+
+            if (isPlaying) {
+                animationFrameId = requestAnimationFrame(animateLoop);
+            }
+        }
+
+        function drawCourse(segments, currentTrackX = 0) {
             const canvas = document.getElementById('courseCanvas');
             const ctx = canvas.getContext('2d');
             
@@ -413,7 +606,6 @@
             
             let totalH = (maxRel - minRel) + 3.0; 
             let scale = canvas.height / Math.max(totalH, 1);
-            
             let startY = (0 - minRel + 1.5) * scale;
 
             ctx.beginPath();
@@ -434,6 +626,10 @@
             let currentX = startX;
             let currentY = startY;
             
+            let ballCanvasX = startX;
+            let ballCanvasY = startY;
+            let trackAccumulated = 0;
+
             segments.forEach((seg, index) => {
                 let nextX = currentX + stepX;
                 let nextY = currentY;
@@ -444,26 +640,50 @@
                 
                 ctx.font = "bold 14px sans-serif";
                 ctx.fillStyle = "#0056b3";
-                
                 let labelText = hideCourseNames ? `区間${index+1}` : `区間${index+1} (${seg})`;
                 let textY = Math.min(currentY, nextY) - 15;
                 ctx.fillText(labelText, currentX + stepX/2 - 30, textY);
                 
+                if (currentTrackX >= trackAccumulated && currentTrackX < trackAccumulated + SEGMENT_LENGTH) {
+                    let progress = (currentTrackX - trackAccumulated) / SEGMENT_LENGTH;
+                    ballCanvasX = currentX + progress * stepX;
+                    ballCanvasY = currentY + progress * (nextY - currentY);
+                } else if (currentTrackX < 0) { 
+                    let progress = currentTrackX / SEGMENT_LENGTH;
+                    let virtualPrevY = startY;
+                    if (segments[0] === 'A') virtualPrevY -= 1.5 * scale;
+                    else if (segments[0] === 'C') virtualPrevY += 1.0 * scale;
+                    ballCanvasX = startX + progress * stepX;
+                    ballCanvasY = startY + progress * (startY - virtualPrevY); 
+                } else if (index === segments.length - 1 && currentTrackX >= trackAccumulated + SEGMENT_LENGTH) { 
+                    let progress = (currentTrackX - trackAccumulated) / SEGMENT_LENGTH;
+                    ballCanvasX = currentX + progress * stepX;
+                    ballCanvasY = currentY + progress * (nextY - currentY);
+                }
+
                 currentX = nextX;
                 currentY = nextY;
+                trackAccumulated += SEGMENT_LENGTH;
             });
             ctx.stroke();
 
             ctx.beginPath();
-            ctx.arc(startX, startY - 10, 8, 0, Math.PI*2);
+            ctx.arc(ballCanvasX, ballCanvasY - 10, 10, 0, Math.PI*2);
             ctx.fillStyle = '#dc3545';
             ctx.fill();
+            ctx.strokeStyle = 'white';
+            ctx.lineWidth = 2;
+            ctx.stroke();
         }
 
         function generateSimulation() {
-            const segments = getSelectedSegments();
-            drawCourse(segments);
+            isPlaying = false;
+            currentFrameIndex = -1;
+            document.getElementById('playBtn').innerHTML = "▶ アニメーション再生";
+            cancelAnimationFrame(animationFrameId);
 
+            const segments = getSelectedSegments();
+            
             let t = 0;
             let x = 0;
             let v = V0;
@@ -537,18 +757,21 @@
                 regions.push(currentRegion);
             }
 
-            // ★変更点：実際の開始時間から終了時間までのみ接線を引く★
+            simulationData.x = xData;
+            simulationData.t = timeData;
+
+            drawCourse(segments, 0);
+
             let guideDatasets = [];
             regions.forEach(region => {
                 let s = region.startIndex;
                 let e = region.endIndex;
                 let t_s = parseFloat(timeData[s]);
                 let x_s = xData[s];
-                let v_s = parseFloat(vData[s]); // 区間突入時の初速度
+                let v_s = parseFloat(vData[s]); 
 
                 let guideData = new Array(timeData.length).fill(null);
 
-                // 各区間の定義域内でのみ等速直線運動の接線を計算
                 if (e > s) {
                     for (let i = s; i <= e; i++) {
                         let t_i = parseFloat(timeData[i]);
@@ -560,7 +783,7 @@
 
                 guideDatasets.push({
                     data: guideData,
-                    borderColor: showGuideLines ? '#ffc107' : 'transparent',
+                    borderColor: (showGuideLines && !hideGraphLines) ? '#ffc107' : 'transparent',
                     borderWidth: 2,
                     borderDash: [5, 5],
                     pointRadius: 0,
@@ -580,7 +803,8 @@
                 animation: { duration: 0 },
                 plugins: {
                     legend: { display: false },
-                    segmentOverlay: { regions: regions, maxSegments: maxSegments }
+                    segmentOverlay: { regions: regions, maxSegments: maxSegments },
+                    tooltip: { enabled: false } 
                 },
                 scales: {
                     x: {
@@ -602,10 +826,7 @@
             if(charts.xt) charts.xt.destroy();
             charts.xt = new Chart(document.getElementById('xtChart'), {
                 type: 'line',
-                data: { 
-                    labels: labels, 
-                    datasets: xtDatasets 
-                },
+                data: { labels: labels, datasets: xtDatasets },
                 options: { ...commonOptions, scales: { ...commonOptions.scales, y: { title: { display: true, text: '位置 x [m]' } } } }
             });
 
@@ -628,9 +849,38 @@
         }
 
         window.addEventListener('DOMContentLoaded', () => {
+            // URLパラメータから共有されたコースを読み込む
+            const urlParams = new URLSearchParams(window.location.search);
+            const sParam = urlParams.get('s');
+            
+            if (sParam) {
+                // 生徒がQRから開いた場合の初期化
+                const segs = sParam.split(',');
+                for (let i = 0; i < 5; i++) {
+                    if (segs[i]) document.getElementById(`seg${i}`).value = segs[i];
+                }
+                // 生徒用：問題モード＆予想モードを強制ON（答えを見せない）
+                document.getElementById('hideAnswerCheck').checked = true;
+                hideCourseNames = true;
+                document.getElementById('hideLinesCheck').checked = true;
+                hideGraphLines = true;
+                document.getElementById('showGuideCheck').checked = false;
+                showGuideLines = false;
+            } else {
+                // 通常起動時の初期化
+                document.getElementById('hideLinesCheck').checked = true;
+                hideGraphLines = true;
+                document.getElementById('showGuideCheck').checked = false;
+                showGuideLines = false;
+            }
+
             document.querySelectorAll('.segment-select').forEach(select => {
                 select.addEventListener('change', () => {
-                    drawCourse(getSelectedSegments());
+                    document.getElementById('hideLinesCheck').checked = true;
+                    hideGraphLines = true;
+                    document.getElementById('showGuideCheck').checked = false;
+                    showGuideLines = false;
+                    generateSimulation();
                 });
             });
             
