@@ -1,7 +1,6 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="robots" content="noindex, nofollow">
@@ -95,7 +94,6 @@
             border: 1px solid #bee5eb;
             color: #0c5460;
         }
-        /* 新機能：ガイドライン用のボタンスタイル */
         .mode-toggle.guide-mode {
             background-color: #e2e3e5;
             border: 1px solid #d6d8db;
@@ -210,7 +208,7 @@
             </label>
             <label class="mode-toggle guide-mode">
                 <input type="checkbox" id="showGuideCheck" onchange="toggleGuideLines()">
-                【補助線】X-Tグラフに「直線（等速直線運動）」の補助線を引く
+                【補助線】X-Tグラフに「等速直線運動（接線）」の補助線を引く
             </label>
         </div>
 
@@ -249,7 +247,7 @@
     <script>
         let hideCourseNames = false; 
         let hideGraphLines = false; 
-        let showGuideLines = false; // 補助線のフラグ
+        let showGuideLines = false; 
 
         const segmentOverlayPlugin = {
             id: 'segmentOverlay',
@@ -305,7 +303,6 @@
         };
         Chart.register(segmentOverlayPlugin);
 
-        // バランスの取れた黄金パラメータ
         const V0 = 5.0;              
         const SEGMENT_LENGTH = 10.0; 
         const ACCEL_A = 1.5;         
@@ -339,12 +336,14 @@
             }
         }
 
-        // 新機能：直線ガイドの切り替え
+        // 接線の表示切り替え処理
         function toggleGuideLines() {
             showGuideLines = document.getElementById('showGuideCheck').checked;
             if(charts.xt && charts.xt.data.datasets.length > 1) {
-                // ガイドライン（データセット2番目）の色を切り替え
-                charts.xt.data.datasets[1].borderColor = showGuideLines ? '#ffc107' : 'transparent';
+                // 1番目以降のデータセット（すべての独立した接線）の色を切り替える
+                for(let i = 1; i < charts.xt.data.datasets.length; i++) {
+                    charts.xt.data.datasets[i].borderColor = showGuideLines ? '#ffc107' : 'transparent';
+                }
                 charts.xt.update();
             }
         }
@@ -392,8 +391,11 @@
         function drawCourse(segments) {
             const canvas = document.getElementById('courseCanvas');
             const ctx = canvas.getContext('2d');
-            canvas.width = canvas.parentElement.clientWidth;
-            canvas.height = canvas.parentElement.clientHeight;
+            
+            const parentWidth = canvas.parentElement.clientWidth;
+            const parentHeight = canvas.parentElement.clientHeight;
+            canvas.width = parentWidth > 0 ? parentWidth : 760;
+            canvas.height = parentHeight > 0 ? parentHeight : 180;
             
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             
@@ -537,31 +539,47 @@
                 regions.push(currentRegion);
             }
 
-            // --- 直線ガイドライン（等速直線運動の仮定）のデータ生成 ---
-            let guideData = new Array(timeData.length).fill(null);
+            // ★改良部分：各区間ごとの「独立した接線データセット」を作成する★
+            let guideDatasets = [];
             regions.forEach(region => {
                 let s = region.startIndex;
-                let e = region.endIndex;
                 let t_s = parseFloat(timeData[s]);
                 let x_s = xData[s];
-                let t_e = parseFloat(timeData[e]);
-                let x_e = xData[e];
+                let v_s = parseFloat(vData[s]); // 区間突入時の初速度
+                let e = region.endIndex;
 
-                if (t_e > t_s) {
-                    for(let i = s; i <= e; i++) {
-                        let t_i = parseFloat(timeData[i]);
-                        // 始点と終点を結ぶ一次関数（直線）を計算
-                        guideData[i] = x_s + (x_e - x_s) * (t_i - t_s) / (t_e - t_s);
-                    }
-                } else {
-                    guideData[s] = x_s;
+                let guideData = new Array(timeData.length).fill(null);
+                
+                // その区間の「目標距離」を設定（前方に進むなら+10m、後退なら-10m）
+                let target_x = x_s + (v_s > 0 ? 10 : (v_s < 0 ? -10 : 0));
+
+                for (let i = s; i < timeData.length; i++) {
+                    let t_i = parseFloat(timeData[i]);
+                    // 突入時の速度のまま、等速直線運動をした場合の位置（接線）
+                    let x_g = x_s + v_s * (t_i - t_s);
+                    guideData[i] = x_g;
+
+                    // 接線が目標の距離（10m先）に到達したら、描画をストップする
+                    if (v_s > 0 && x_g >= target_x) break;
+                    if (v_s < 0 && x_g <= target_x) break;
+                    if (v_s === 0 && i >= e) break; // 速度0の場合は区間終了まで
                 }
+
+                // 計算した1本分の接線をデータセットに追加
+                guideDatasets.push({
+                    data: guideData,
+                    borderColor: showGuideLines ? '#ffc107' : 'transparent',
+                    borderWidth: 2,
+                    borderDash: [5, 5],
+                    pointRadius: 0,
+                    tension: 0
+                });
             });
 
-            renderCharts(timeData, xData, vData, aData, guideData, regions, segments.length);
+            renderCharts(timeData, xData, vData, aData, guideDatasets, regions, segments.length);
         }
 
-        function renderCharts(labels, xData, vData, aData, guideData, regions, maxSegments) {
+        function renderCharts(labels, xData, vData, aData, guideDatasets, regions, maxSegments) {
             const commonOptions = {
                 responsive: true,
                 maintainAspectRatio: false,
@@ -580,24 +598,22 @@
                 }
             };
 
+            // 実データのグラフと、すべての接線のグラフを結合
+            let xtDatasets = [
+                { 
+                    data: xData, 
+                    borderColor: hideGraphLines ? 'transparent' : '#007bff', 
+                    borderWidth: 3 
+                }
+            ];
+            xtDatasets.push(...guideDatasets);
+
             if(charts.xt) charts.xt.destroy();
             charts.xt = new Chart(document.getElementById('xtChart'), {
                 type: 'line',
                 data: { 
                     labels: labels, 
-                    datasets: [
-                        { // 実際の曲線（物理演算）
-                            data: xData, 
-                            borderColor: hideGraphLines ? 'transparent' : '#007bff', 
-                            borderWidth: 3 
-                        },
-                        { // 追加：直線ガイド（等速直線運動の仮想線）
-                            data: guideData,
-                            borderColor: showGuideLines ? '#ffc107' : 'transparent', // 黄色い点線
-                            borderWidth: 2,
-                            borderDash: [5, 5]
-                        }
-                    ] 
+                    datasets: xtDatasets 
                 },
                 options: { ...commonOptions, scales: { ...commonOptions.scales, y: { title: { display: true, text: '位置 x [m]' } } } }
             });
@@ -620,14 +636,17 @@
             });
         }
 
-        window.onload = () => {
+        window.addEventListener('DOMContentLoaded', () => {
             document.querySelectorAll('.segment-select').forEach(select => {
                 select.addEventListener('change', () => {
                     drawCourse(getSelectedSegments());
                 });
             });
-            generateSimulation();
-        };
+            
+            setTimeout(() => {
+                generateSimulation();
+            }, 100);
+        });
     </script>
 </body>
 </html>
