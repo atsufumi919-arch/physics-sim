@@ -196,11 +196,6 @@
             background-color: white;
             border-top: 3px solid var(--primary);
         }
-        .tab-btn.hidden-tab {
-            background-color: #ffdddd;
-            color: var(--danger);
-            border-color: #dca7a7;
-        }
         
         button.play-btn {
             padding: 8px 20px;
@@ -289,7 +284,7 @@
                     【問題モード】図とグラフからコース名(A,B,C)を隠す
                 </label>
                 <label class="mode-toggle prediction-mode">
-                    <input type="checkbox" id="hideLinesCheck" onchange="toggleGraphLines()">
+                    <input type="checkbox" id="hideLinesCheck" checked onchange="toggleGraphLines(true)">
                     【予想用シート作成】グラフの線を隠す（枠組みだけ残す）
                 </label>
                 <label class="mode-toggle guide-mode">
@@ -315,7 +310,7 @@
             <div class="tabs">
                 <button class="tab-btn active" onclick="switchTab('xt')">X-T グラフ (位置)</button>
                 <button class="tab-btn" onclick="switchTab('vt')">V-T グラフ (速度)</button>
-                <button class="tab-btn hidden-tab" id="atTabBtn" onclick="unlockAT()">A-T グラフを開く 🔒</button>
+                <button class="tab-btn" id="atTabBtn" onclick="switchTab('at')">A-T グラフ (加速度)</button>
             </div>
             <button class="play-btn" id="playBtn" onclick="togglePlay()">▶ アニメーション再生</button>
         </div>
@@ -343,8 +338,22 @@
     </div>
 
     <script>
+        // ★新規追加：Chart.jsの背景を白にするプラグイン（コピペ時の黒抜け対策）★
+        const whiteBackgroundPlugin = {
+            id: 'customCanvasBackgroundColor',
+            beforeDraw: (chart, args, options) => {
+                const {ctx} = chart;
+                ctx.save();
+                ctx.globalCompositeOperation = 'destination-over';
+                ctx.fillStyle = 'white';
+                ctx.fillRect(0, 0, chart.width, chart.height);
+                ctx.restore();
+            }
+        };
+        Chart.register(whiteBackgroundPlugin);
+
         let hideCourseNames = false; 
-        let hideGraphLines = false; 
+        let hideGraphLines = true; // 初期状態はtrue(予想シートモード)
         let showGuideLines = false; 
 
         let isPlaying = false;
@@ -428,11 +437,11 @@
         const ACCEL_C = -1.0;        
 
         let charts = { xt: null, vt: null, at: null };
-        let atUnlocked = false;
 
         function showGraph() {
+            // 「グラフを作成」ボタンを押したときは、予想モードを解除（自動なのでポップアップは出さない）
             document.getElementById('hideLinesCheck').checked = false;
-            hideGraphLines = false;
+            toggleGraphLines(false);
             generateSimulation();
         }
 
@@ -444,8 +453,15 @@
             if(charts.at) charts.at.update();
         }
 
-        function toggleGraphLines() {
-            hideGraphLines = document.getElementById('hideLinesCheck').checked;
+        // 引数 isUserAction で、ユーザーの手動クリックか自動変更かを判別
+        function toggleGraphLines(isUserAction = false) {
+            const checkbox = document.getElementById('hideLinesCheck');
+            // ユーザー操作でチェックが「外された」時のみポップアップ
+            if (isUserAction && !checkbox.checked) {
+                alert("予想シートの作成をオフにします。\nシミュレーションを実行する前に、頭の中でしっかりグラフの形を予想してくださいね。");
+            }
+            hideGraphLines = checkbox.checked;
+
             if(charts.xt) {
                 charts.xt.data.datasets[0].borderColor = hideGraphLines ? 'transparent' : '#007bff';
                 if(charts.xt.data.datasets.length > 1) {
@@ -488,33 +504,16 @@
             }
         }
 
-        function unlockAT() {
-            if(!atUnlocked) {
-                const confirmMsg = "A-Tグラフを表示します。\nペアとの予想・話し合いは終わりましたか？";
-                if(confirm(confirmMsg)) {
-                    atUnlocked = true;
-                    const btn = document.getElementById('atTabBtn');
-                    btn.innerText = "A-T グラフ (加速度) 🔓";
-                    btn.classList.remove('hidden-tab');
-                    switchTab('at');
-                }
-            } else {
-                switchTab('at');
-            }
-        }
-
-        // ★新機能：QRコードによる共有機能★
         function generateShareQR() {
             let segs = [];
             for (let i = 0; i < 5; i++) {
                 segs.push(document.getElementById(`seg${i}`).value);
             }
             
-            // 現在のURLにコース情報(?s=A,B...)を付与
             const shareUrl = window.location.origin + window.location.pathname + '?s=' + segs.join(',');
             
             const qrContainer = document.getElementById('qrcode');
-            qrContainer.innerHTML = ''; // 以前のQRをクリア
+            qrContainer.innerHTML = ''; 
             
             new QRCode(qrContainer, {
                 text: shareUrl,
@@ -588,7 +587,9 @@
             canvas.width = parentWidth > 0 ? parentWidth : 760;
             canvas.height = parentHeight > 0 ? parentHeight : 180;
             
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            // ★新規追加：コピペ対策のため背景を白で塗りつぶす★
+            ctx.fillStyle = "white";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
             
             const startX = 50;
             const endX = canvas.width - 50;
@@ -849,17 +850,14 @@
         }
 
         window.addEventListener('DOMContentLoaded', () => {
-            // URLパラメータから共有されたコースを読み込む
             const urlParams = new URLSearchParams(window.location.search);
             const sParam = urlParams.get('s');
             
             if (sParam) {
-                // 生徒がQRから開いた場合の初期化
                 const segs = sParam.split(',');
                 for (let i = 0; i < 5; i++) {
                     if (segs[i]) document.getElementById(`seg${i}`).value = segs[i];
                 }
-                // 生徒用：問題モード＆予想モードを強制ON（答えを見せない）
                 document.getElementById('hideAnswerCheck').checked = true;
                 hideCourseNames = true;
                 document.getElementById('hideLinesCheck').checked = true;
@@ -867,7 +865,7 @@
                 document.getElementById('showGuideCheck').checked = false;
                 showGuideLines = false;
             } else {
-                // 通常起動時の初期化
+                // 通常起動時の初期化（予想シート作成はデフォルトON）
                 document.getElementById('hideLinesCheck').checked = true;
                 hideGraphLines = true;
                 document.getElementById('showGuideCheck').checked = false;
@@ -876,8 +874,9 @@
 
             document.querySelectorAll('.segment-select').forEach(select => {
                 select.addEventListener('change', () => {
+                    // コース変更時は自動で予想シートモードに戻す（アラートは出さない）
                     document.getElementById('hideLinesCheck').checked = true;
-                    hideGraphLines = true;
+                    toggleGraphLines(false); 
                     document.getElementById('showGuideCheck').checked = false;
                     showGuideLines = false;
                     generateSimulation();
