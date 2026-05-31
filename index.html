@@ -338,7 +338,7 @@
     </div>
 
     <script>
-        // ★新規追加：Chart.jsの背景を白にするプラグイン（コピペ時の黒抜け対策）★
+        // Chart.jsの背景を白にするプラグイン（コピペ時の黒抜け対策）
         const whiteBackgroundPlugin = {
             id: 'customCanvasBackgroundColor',
             beforeDraw: (chart, args, options) => {
@@ -386,6 +386,7 @@
                     const startPx = meta.data[region.startIndex].x;
                     const endPx = meta.data[region.endIndex].x;
                     
+                    // 点線（縦の区切り線）は描画する
                     if (region.startIndex > 0) {
                         ctx.beginPath();
                         ctx.moveTo(startPx, top);
@@ -393,14 +394,17 @@
                         ctx.stroke();
                     }
 
-                    const midPx = startPx + (endPx - startPx) / 2;
-                    let labelText = "";
-                    if (region.segIndex === -1) labelText = "逆走";
-                    else if (region.segIndex >= options.maxSegments) labelText = "完走";
-                    else labelText = hideCourseNames ? `区間${region.segIndex + 1}` : `区間${region.segIndex + 1} (${region.name})`;
+                    // 問題モードでない場合のみ「区間1」などのテキストを描画する
+                    if (!hideCourseNames) {
+                        const midPx = startPx + (endPx - startPx) / 2;
+                        let labelText = "";
+                        if (region.segIndex === -1) labelText = "逆走";
+                        else if (region.segIndex >= options.maxSegments) labelText = "完走";
+                        else labelText = `区間${region.segIndex + 1} (${region.name})`;
 
-                    const yOffset = top - 4 - (index % 2) * 18; 
-                    ctx.fillText(labelText, midPx, yOffset);
+                        const yOffset = top - 4 - (index % 2) * 18; 
+                        ctx.fillText(labelText, midPx, yOffset);
+                    }
                 });
 
                 if (currentFrameIndex >= 0 && currentFrameIndex < meta.data.length) {
@@ -439,7 +443,6 @@
         let charts = { xt: null, vt: null, at: null };
 
         function showGraph() {
-            // 「グラフを作成」ボタンを押したときは、予想モードを解除（自動なのでポップアップは出さない）
             document.getElementById('hideLinesCheck').checked = false;
             toggleGraphLines(false);
             generateSimulation();
@@ -453,10 +456,8 @@
             if(charts.at) charts.at.update();
         }
 
-        // 引数 isUserAction で、ユーザーの手動クリックか自動変更かを判別
         function toggleGraphLines(isUserAction = false) {
             const checkbox = document.getElementById('hideLinesCheck');
-            // ユーザー操作でチェックが「外された」時のみポップアップ
             if (isUserAction && !checkbox.checked) {
                 alert("予想シートの作成をオフにします。\nシミュレーションを実行する前に、頭の中でしっかりグラフの形を予想してくださいね。");
             }
@@ -587,7 +588,7 @@
             canvas.width = parentWidth > 0 ? parentWidth : 760;
             canvas.height = parentHeight > 0 ? parentHeight : 180;
             
-            // ★新規追加：コピペ対策のため背景を白で塗りつぶす★
+            // コピペ対策のため背景を白で塗りつぶす
             ctx.fillStyle = "white";
             ctx.fillRect(0, 0, canvas.width, canvas.height);
             
@@ -639,11 +640,14 @@
                 
                 ctx.lineTo(nextX, nextY);
                 
-                ctx.font = "bold 14px sans-serif";
-                ctx.fillStyle = "#0056b3";
-                let labelText = hideCourseNames ? `区間${index+1}` : `区間${index+1} (${seg})`;
-                let textY = Math.min(currentY, nextY) - 15;
-                ctx.fillText(labelText, currentX + stepX/2 - 30, textY);
+                // 問題モードでない場合のみコース上のテキストを表示
+                if (!hideCourseNames) {
+                    ctx.font = "bold 14px sans-serif";
+                    ctx.fillStyle = "#0056b3";
+                    let labelText = `区間${index+1} (${seg})`;
+                    let textY = Math.min(currentY, nextY) - 15;
+                    ctx.fillText(labelText, currentX + stepX/2 - 30, textY);
+                }
                 
                 if (currentTrackX >= trackAccumulated && currentTrackX < trackAccumulated + SEGMENT_LENGTH) {
                     let progress = (currentTrackX - trackAccumulated) / SEGMENT_LENGTH;
@@ -865,7 +869,6 @@
                 document.getElementById('showGuideCheck').checked = false;
                 showGuideLines = false;
             } else {
-                // 通常起動時の初期化（予想シート作成はデフォルトON）
                 document.getElementById('hideLinesCheck').checked = true;
                 hideGraphLines = true;
                 document.getElementById('showGuideCheck').checked = false;
@@ -874,7 +877,6 @@
 
             document.querySelectorAll('.segment-select').forEach(select => {
                 select.addEventListener('change', () => {
-                    // コース変更時は自動で予想シートモードに戻す（アラートは出さない）
                     document.getElementById('hideLinesCheck').checked = true;
                     toggleGraphLines(false); 
                     document.getElementById('showGuideCheck').checked = false;
